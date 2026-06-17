@@ -41,14 +41,26 @@ part_name, length_mm, width_mm, qty, material, edging, edge_l, edge_w, room, rem
 (e.g. "Dumblane · 2 long edges + 2 short edges", or "None"). Columns are matched by
 name, so adding more columns or re-ordering them won't break the app.
 
+**Optional `flat_type` column** — add a column named `flat_type` (or `flat`,
+`unit_type`, `section`) with values **`Main Flat`**, **`Top Flat`**, or **`Both`** to
+split parts between the *Main Flats* and *Top Flats* tabs (see below). Rows without it
+default to **Main Flat**. No code change needed — add the column and the tabs populate.
+
 The live URL is set in `index.html` (search for `CSV_URL`, near the bottom). You can
-also override it **without editing the file**:
-- tap the **⚙** button in the app and paste a new published-CSV URL (saved on that
-  device via `localStorage`), or
-- add `?csv=<url>` to the page address.
+also change it **without editing the file** (admin only): **press and hold the title**
+("Cedarwood — Cutting List") for ~1 second to open a box where you paste a new
+published-CSV URL (saved on that device via `localStorage`). Or add `?csv=<url>` to the
+page address. The hold gesture is hidden so staff don't change the source by accident.
 
 To (re)publish the sheet: **File ▸ Share ▸ Publish to web ▸ pick the sheet ▸ CSV**.
 Edit the sheet and the app updates live — no redeploy needed. Tap **↻** to refresh.
+
+## Main Flats / Top Flats tabs
+Tabs at the top — **All / Main Flats / Top Flats** — let you browse one flat type at a
+time (the Kitchen/Bedroom and material filters still apply within it). **Searching
+always spans both flat types**, because a measurement could belong to either and staff
+are just trying to identify a part; when there are top-flat parts, each result card
+shows a **Main Flat / Top Flat / Both** label so you can tell which is which.
 
 ## How the search works
 The single search box detects what you type:

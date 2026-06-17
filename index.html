@@ -117,6 +117,19 @@
   .chip:active{transform:scale(.96)}
   .chip .dot{width:11px;height:11px;border-radius:50%;flex:0 0 auto}
 
+  /* ---------- Flat-type tabs (Main / Top) ---------- */
+  .flat-tabs{display:flex;gap:7px;padding:11px 14px 2px}
+  .flat-tab{
+    flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    background:var(--panel);border:1px solid var(--border);color:var(--muted);
+    padding:11px 8px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;
+    transition:.15s;white-space:nowrap;
+  }
+  .flat-tab b{font-weight:700;font-size:11.5px;opacity:.55}
+  .flat-tab.active{background:var(--accent-dim);border-color:var(--accent);color:var(--text)}
+  .flat-tab.active b{opacity:.85}
+  .flat-tab:active{transform:scale(.97)}
+
   /* ---------- Results ---------- */
   .results{padding:6px 14px 30px;display:flex;flex-direction:column;gap:10px}
   .card{
@@ -126,6 +139,12 @@
   .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
   .card-name{font-size:16.5px;font-weight:700;line-height:1.25;word-break:break-word}
   .card-name mark{background:transparent;color:var(--hi);padding:0;font-weight:800}
+  .tags{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:0 0 auto}
+  .flat-tag{
+    font-size:10.5px;font-weight:800;letter-spacing:.4px;padding:3px 9px;border-radius:20px;
+    text-transform:uppercase;border:1px solid var(--ft,#5ec2a6);color:var(--ft,#5ec2a6);
+    background:color-mix(in srgb, var(--ft,#5ec2a6) 15%, transparent);white-space:nowrap;
+  }
   .room-tag{
     flex:0 0 auto;font-size:11px;font-weight:700;letter-spacing:.3px;
     padding:4px 10px;border-radius:20px;text-transform:uppercase;
@@ -178,7 +197,7 @@
     <div class="head-row">
       <div class="brand" id="brand">
         <h1>Cedarwood — Cutting List</h1>
-        <p>Main Flats &nbsp;·&nbsp; My Cabinet Guy</p>
+        <p>Main &amp; Top Flats &nbsp;·&nbsp; My Cabinet Guy</p>
       </div>
       <div class="head-btns">
         <button class="iconbtn" id="btnRefresh" title="Refresh data" aria-label="Refresh">↻</button>
@@ -199,6 +218,7 @@
     </div>
   </header>
 
+  <div class="flat-tabs" id="flatTabs"></div>
   <div class="filters" id="roomFilters"></div>
   <div class="filters materials" id="matFilters"></div>
 
@@ -380,9 +400,29 @@ function roomColor(room){
 }
 function getCSS(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim() || "#4f8cff"; }
 
+/* ---------- Flat type (Main Flats / Top Flats) ----------
+   Driven by an optional sheet column (flat_type / flat / unit_type / section).
+   Missing or unrecognised → Main Flat (the current 140-part list). "Both"/"all"
+   appears under both tabs. Search always spans BOTH flat types. */
+const FLAT_TABS = ["Main Flat", "Top Flat"];   // browse tabs (plus an "All")
+function flatTypeOf(p){
+  const k = normKey(p.flat_type);
+  if(!k) return "Main Flat";
+  if(k.indexOf("both")>-1 || k==="all") return "Both";
+  if(k.indexOf("top")>-1) return "Top Flat";
+  return "Main Flat";
+}
+function flatMatches(p, tab){           // does part belong under this tab?
+  if(!tab) return true;                 // "" = All
+  const t = flatTypeOf(p);
+  return t===tab || t==="Both";
+}
+function flatColor(tab){ return tab==="Top Flat" ? "#f0a04b" : "#5ec2a6"; }
+
 /* ---------- State ---------- */
 const state = {
-  parts: [],            // [{part_name,length_mm,width_mm,qty,material,room,remarks}]
+  parts: [],            // [{part_name,length_mm,width_mm,qty,material,edging,...,flat_type,room,remarks}]
+  flat: "",             // "" = all, else "Main Flat" / "Top Flat"
   room: "",             // "" = all
   material: "",         // "" = all
   query: "",
@@ -424,6 +464,8 @@ function rowsToParts(rows){
   const iName=col("partname"), iLen=col("lengthmm"), iWid=col("widthmm"),
         iQty=col("qty"), iMat=col("material"), iRoom=col("room"), iRem=col("remarks"),
         iEdg=col("edging"), iEdL=col("edgel"), iEdW=col("edgew");
+  // optional flat-type column (Top Flat / Main Flat / Both); accept a few names
+  const iFlat = [col("flattype"),col("flat"),col("unittype"),col("section")].find(i=>i>=0);
   if(iName < 0) return [];
   const g=(r,idx)=> idx>=0 ? String(r[idx]??"").trim() : "";
   const out=[];
@@ -441,6 +483,7 @@ function rowsToParts(rows){
       edging:    g(row,iEdg),
       edge_l:    g(row,iEdL),
       edge_w:    g(row,iEdW),
+      flat_type: g(row,iFlat==null?-1:iFlat),
       room:      g(row,iRoom),
       remarks:   g(row,iRem)
     });
@@ -534,6 +577,9 @@ function currentResults(){
   const parsed = parseQuery(state.query);
   const out = [];
   for(const p of state.parts){
+    // Flat-type tab applies only while BROWSING. A search spans both flat types,
+    // because a measurement could belong to either and staff are identifying a part.
+    if(parsed.empty && !flatMatches(p, state.flat)) continue;
     if(state.room && (p.room||"").toLowerCase() !== state.room.toLowerCase()) continue;
     if(state.material && (p.material||"") !== state.material) continue;
     if(parsed.empty){ out.push({ part:p, score:0 }); continue; }
@@ -587,6 +633,17 @@ function edgeLineHTML(p){
        + `<span class="sides">${sides.join(" + ")}</span></div>`;
 }
 
+/* Flat-type label on a card — only shown when the data actually has top-flat parts,
+   so today's main-flats-only list stays uncluttered. */
+function flatTagHTML(p){
+  if(!state.hasTopFlats) return "";
+  const t = flatTypeOf(p);
+  const label = t==="Both" ? "Both" : t;
+  const col = t==="Top Flat" ? flatColor("Top Flat")
+            : t==="Main Flat" ? flatColor("Main Flat") : "#9aa6b8";
+  return `<span class="flat-tag" style="--ft:${col}">${escapeHtml(label)}</span>`;
+}
+
 function cardHTML(p, parsed){
   const col = roomColor(p.room);
   const roomTag = p.room
@@ -601,7 +658,7 @@ function cardHTML(p, parsed){
   return `<div class="card">
       <div class="card-top">
         <div class="card-name">${name}</div>
-        ${roomTag}
+        <div class="tags">${flatTagHTML(p)}${roomTag}</div>
       </div>
       <div class="dims">${len}<span class="x">×</span>${wid}<span class="u">mm</span></div>
       <div class="meta">${qty}${mat}</div>
@@ -614,10 +671,19 @@ function renderResults(){
   const { parsed, list } = currentResults();
   const box = document.getElementById("results");
   if(!list.length){
+    let title = "No parts found";
+    let sub = "Try a part name (e.g. “drawer”) or a size (e.g. “815” or “815 x 596”).";
+    if(parsed.empty && state.flat==="Top Flat"){
+      title = "No Top Flat parts yet";
+      sub = "Top-flat parts appear here once they’re added to the sheet (search still covers them).";
+    }else if(parsed.empty && (state.flat || state.room || state.material)){
+      title = "No parts match these filters";
+      sub = "Clear a filter to see more.";
+    }
     box.innerHTML = `<div class="empty-state">
         <div class="big">🔍</div>
-        <div class="t">No parts found</div>
-        <div class="s">Try a part name (e.g. “drawer”) or a size (e.g. “815” or “815 x 596”).</div>
+        <div class="t">${title}</div>
+        <div class="s">${sub}</div>
       </div>`;
   }else{
     box.innerHTML = list.map(p => cardHTML(p, parsed)).join("");
@@ -627,11 +693,13 @@ function renderResults(){
 
 function renderCount(n, parsed){
   const el = document.getElementById("count");
-  const active = !parsed.empty || state.room || state.material;
   if(!state.parts.length){ el.textContent = "Loading…"; return; }
+  const active = !parsed.empty || state.flat || state.room || state.material;
   const noun = n===1 ? "part" : "parts";
+  // When searching, results span both flat types — flag it so staff know.
+  const span = (!parsed.empty && state.hasTopFlats) ? " (Main + Top)" : "";
   el.innerHTML = active
-    ? `<b>${n}</b> ${noun} found`
+    ? `<b>${n}</b> ${noun} found${span}`
     : `<b>${n}</b> ${noun} total`;
 }
 
@@ -650,12 +718,23 @@ function distinct(key, order){
 }
 
 function rebuildFilters(){
-  // Rooms
+  // Does the data contain any top-flat parts yet?
+  state.hasTopFlats = state.parts.some(p=>{ const t=flatTypeOf(p); return t==="Top Flat"||t==="Both"; });
+
+  // Flat tabs: All / Main Flats / Top Flats (counts across the whole list)
+  const flatCount = tab => state.parts.filter(p=>flatMatches(p,tab)).length;
+  let fh  = flatTab("",          "All",        state.flat==="",          state.parts.length);
+  fh     += flatTab("Main Flat", "Main Flats", state.flat==="Main Flat", flatCount("Main Flat"));
+  fh     += flatTab("Top Flat",  "Top Flats",  state.flat==="Top Flat",  flatCount("Top Flat"));
+  document.getElementById("flatTabs").innerHTML = fh;
+
+  // Rooms — counts reflect the active flat tab
+  const inFlat = state.parts.filter(p=>flatMatches(p, state.flat));
   const rooms = distinct("room", ["Kitchen","Bedroom"]);
-  let rh = chip("", "All", state.room==="", "room", null, state.parts.length);
+  let rh = chip("", "All", state.room==="", "room", null, inFlat.length);
   rooms.forEach(r=>{
     rh += chip(r, r, state.room===r, "room", roomColor(r),
-               state.parts.filter(p=>p.room===r).length);
+               inFlat.filter(p=>p.room===r).length);
   });
   document.getElementById("roomFilters").innerHTML = rh;
 
@@ -666,6 +745,10 @@ function rebuildFilters(){
     mh += chipSm(m, m, state.material===m);
   });
   document.getElementById("matFilters").innerHTML = mh;
+}
+function flatTab(val,label,active,count){
+  return `<button class="flat-tab${active?" active":""}" data-group="flat" data-val="${escapeHtml(val)}">`
+       + `${escapeHtml(label)}<b>${count}</b></button>`;
 }
 function chip(val,label,active,group,dot,count){
   const d = dot ? `<span class="dot" style="background:${dot}"></span>` : "";
@@ -709,6 +792,8 @@ document.getElementById("searchClear").addEventListener("click", ()=>{
 });
 
 document.body.addEventListener("click", e=>{
+  const ft = e.target.closest(".flat-tab");
+  if(ft){ state.flat = ft.dataset.val; rebuildFilters(); renderResults(); return; }
   const chip = e.target.closest(".chip");
   if(!chip) return;
   const group = chip.dataset.group, val = chip.dataset.val;

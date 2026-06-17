@@ -1,7 +1,7 @@
 /* Cedarwood Cutting List — service worker
    Caches the app shell so it opens with NO internet after the first visit.
    Bump CACHE when you change index.html and want clients to pick it up sooner. */
-const CACHE = "cedarwood-cutlist-v2";
+const CACHE = "cedarwood-cutlist-v3";
 const ASSETS = [
   "./",
   "./index.html",
