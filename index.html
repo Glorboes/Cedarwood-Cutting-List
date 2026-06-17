@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0e1217">
+<title>Cedarwood — Cutting List Search</title>
+<style>
+  /* ============================================================
+     CONFIG note: the data source (Google Sheet CSV URL) is set
+     in the <script> block at the bottom — search for CSV_URL.
+     You can also set it live via the ⚙ button (saved per-device).
+     ============================================================ */
+  :root{
+    --bg:#0e1217;
+    --bg2:#141a22;
+    --panel:#1a212b;
+    --panel2:#212a36;
+    --border:#2b3543;
+    --border2:#384556;
+    --text:#e7ecf3;
+    --muted:#92a0b3;
+    --muted2:#6b7889;
+    --accent:#4f8cff;
+    --accent-dim:#27406b;
+    /* room colours */
+    --room-kitchen:#4f8cff;
+    --room-bedroom:#a78bfa;
+    --hi:#ffd166;          /* search highlight */
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:15px;line-height:1.4;
+    padding-bottom:env(safe-area-inset-bottom);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:760px;margin:0 auto}
+
+  /* ---------- Header (sticky: brand + search always visible) ---------- */
+  header{
+    position:sticky;top:0;z-index:30;
+    background:linear-gradient(180deg,#11161d,#0e1217);
+    border-bottom:1px solid var(--border);
+    padding:10px 14px 10px;
+    padding-top:calc(10px + env(safe-area-inset-top,0));
+  }
+  .head-row{display:flex;align-items:center;gap:10px}
+  .brand{flex:1;min-width:0}
+  .brand h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .brand p{margin:1px 0 0;font-size:11.5px;color:var(--muted)}
+  .head-btns{display:flex;gap:6px}
+  .iconbtn{
+    background:var(--panel);border:1px solid var(--border);color:var(--text);
+    width:40px;height:40px;border-radius:11px;font-size:17px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:.15s;flex:0 0 auto;
+  }
+  .iconbtn:active{transform:scale(.92);background:var(--panel2)}
+
+  /* ---------- Search box ---------- */
+  .search-box{position:relative;margin-top:10px}
+  .search-box .mag{
+    position:absolute;left:14px;top:50%;transform:translateY(-50%);
+    font-size:17px;color:var(--muted2);pointer-events:none;
+  }
+  #search{
+    width:100%;height:52px;border-radius:13px;
+    background:var(--panel);border:1px solid var(--border2);color:var(--text);
+    font-size:17px;padding:0 46px 0 44px;outline:none;transition:.15s;
+  }
+  #search::placeholder{color:var(--muted2)}
+  #search:focus{border-color:var(--accent);background:var(--panel2)}
+  .search-clear{
+    position:absolute;right:8px;top:50%;transform:translateY(-50%);
+    width:34px;height:34px;border-radius:9px;border:none;cursor:pointer;
+    background:var(--panel2);color:var(--muted);font-size:16px;display:none;
+    align-items:center;justify-content:center;
+  }
+  .search-box.has-val .search-clear{display:flex}
+
+  .meta-row{display:flex;align-items:center;justify-content:space-between;margin-top:9px;gap:10px}
+  #count{font-size:13px;color:var(--muted);font-weight:600}
+  #count b{color:var(--text)}
+  .src-badge{font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid var(--border);color:var(--muted);white-space:nowrap}
+  .src-badge.live{color:#7ee2a8;border-color:#235e3f;background:#10251a}
+  .src-badge.cached{color:#f3c969;border-color:#5e4f23;background:#241f10}
+  .src-badge.error{color:#f59b9b;border-color:#5e2323;background:#241010}
+
+  /* ---------- Filter chips ---------- */
+  .filters{
+    display:flex;gap:7px;overflow-x:auto;padding:11px 14px 4px;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;
+  }
+  .filters.materials{padding-top:7px;padding-bottom:11px}
+  .filters::-webkit-scrollbar{display:none}
+  .chip{
+    flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;
+    background:var(--panel);border:1px solid var(--border);color:var(--text);
+    padding:9px 13px;border-radius:21px;font-size:13.5px;cursor:pointer;
+    white-space:nowrap;transition:.15s;
+  }
+  .chip.sm{padding:7px 11px;font-size:12.5px;color:var(--muted)}
+  .chip b{font-weight:700;color:var(--muted);font-size:11.5px}
+  .chip.active{border-color:var(--accent);background:var(--accent-dim);color:var(--text)}
+  .chip.active b{color:var(--text)}
+  .chip:active{transform:scale(.96)}
+  .chip .dot{width:11px;height:11px;border-radius:50%;flex:0 0 auto}
+
+  /* ---------- Results ---------- */
+  .results{padding:6px 14px 30px;display:flex;flex-direction:column;gap:10px}
+  .card{
+    background:var(--bg2);border:1px solid var(--border);border-radius:14px;
+    padding:13px 14px;
+  }
+  .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .card-name{font-size:16.5px;font-weight:700;line-height:1.25;word-break:break-word}
+  .card-name mark{background:transparent;color:var(--hi);padding:0;font-weight:800}
+  .room-tag{
+    flex:0 0 auto;font-size:11px;font-weight:700;letter-spacing:.3px;
+    padding:4px 10px;border-radius:20px;text-transform:uppercase;
+    border:1px solid var(--rt,#4f8cff);color:var(--rt,#4f8cff);
+    background:color-mix(in srgb, var(--rt,#4f8cff) 14%, transparent);
+  }
+  .dims{font-size:27px;font-weight:800;letter-spacing:.5px;margin:9px 0 2px;font-variant-numeric:tabular-nums}
+  .dims .x{color:var(--muted2);font-weight:600;margin:0 6px;font-size:22px}
+  .dims .u{font-size:14px;color:var(--muted2);font-weight:600;margin-left:6px}
+  .dims mark{background:var(--accent-dim);color:#cfe0ff;border-radius:6px;padding:0 5px}
+  .meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px;align-items:center}
+  .pill{
+    display:inline-flex;align-items:center;gap:5px;
+    background:var(--panel);border:1px solid var(--border);border-radius:8px;
+    padding:5px 10px;font-size:13px;color:var(--text);
+  }
+  .pill .lab{color:var(--muted2);font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+  .pill.qty b{font-weight:800}
+  .remarks{
+    margin-top:10px;display:flex;align-items:flex-start;gap:8px;
+    background:#241f10;border:1px solid #5e4f23;border-radius:9px;
+    padding:8px 11px;font-size:13.5px;color:#f3d98a;
+  }
+  .remarks .ic{flex:0 0 auto;opacity:.9}
+  .edge-line{
+    margin-top:9px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--border);border-radius:9px;
+    padding:7px 11px;font-size:13.5px;color:var(--text);
+  }
+  .edge-line .lab{
+    color:var(--muted2);text-transform:uppercase;font-size:10.5px;
+    letter-spacing:.5px;font-weight:700;
+  }
+  .edge-line .mat{font-weight:700}
+  .edge-line .sides{color:var(--muted)}
+  .edge-line.none{color:var(--muted2)}
+  .edge-line.none .lab{color:var(--muted2)}
+
+  .empty-state{padding:54px 24px;text-align:center;color:var(--muted)}
+  .empty-state .big{font-size:40px;margin-bottom:10px}
+  .empty-state .t{font-size:16px;color:var(--text);font-weight:600;margin-bottom:4px}
+  .empty-state .s{font-size:13.5px}
+  .hint{padding:0 14px;font-size:11.5px;color:var(--muted2);margin-top:-2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="head-row">
+      <div class="brand">
+        <h1>Cedarwood — Cutting List</h1>
+        <p>Main Flats &nbsp;·&nbsp; My Cabinet Guy</p>
+      </div>
+      <div class="head-btns">
+        <button class="iconbtn" id="btnRefresh" title="Refresh data" aria-label="Refresh">↻</button>
+        <button class="iconbtn" id="btnSettings" title="Set data source" aria-label="Settings">⚙</button>
+      </div>
+    </div>
+
+    <div class="search-box" id="searchBox">
+      <span class="mag">🔍</span>
+      <input id="search" type="search" inputmode="search" autocomplete="off"
+             autocorrect="off" autocapitalize="off" spellcheck="false"
+             placeholder="Search name or size — e.g. oven door, 815, 815 x 596">
+      <button class="search-clear" id="searchClear" aria-label="Clear">✕</button>
+    </div>
+
+    <div class="meta-row">
+      <span id="count">Loading…</span>
+      <span class="src-badge" id="srcBadge">…</span>
+    </div>
+  </header>
+
+  <div class="filters" id="roomFilters"></div>
+  <div class="filters materials" id="matFilters"></div>
+
+  <div class="results" id="results"></div>
+
+</div>
+
+<script>
+/* ============================================================================
+   CEDARWOOD DEVELOPMENT — CUTTING LIST PART SEARCH (Main Flats)
+   ----------------------------------------------------------------------------
+   DATA SOURCE — published Google Sheet CSV with columns:
+     part_name, length_mm, width_mm, qty, material,
+     edging, edge_l, edge_w, room, remarks
+   (edge_l/edge_w = how many of the long / short edges get banded, 0-2.)
+   Columns are matched by name, so extra columns or re-ordering won't break it.
+   Publish: File ▸ Share ▸ Publish to web ▸ choose the sheet ▸ CSV.
+   Override without editing this file:
+     • tap ⚙ and paste the URL (saved on the device), or
+     • add ?csv=<url> to the page address.
+   If the live fetch fails, the app falls back to the embedded snapshot below
+   so the list still works on site with no signal.
+   This app ONLY reads the sheet — it never writes back.
+============================================================================ */
+const CONFIG = {
+  CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRuQzHwHJ5GSJYHWNN5FB_849qWWnrI56UgT_b71KB6hvzSIMh02TXXWCfBukV8RlDFp4Mn14fnPedg/pub?output=csv",
+  REFRESH_MINUTES: 0
+};
+
+/* ---------- Embedded snapshot (offline fallback only) ---------- */
+const FALLBACK_CSV = `part_name,length_mm,width_mm,qty,material,edging,edge_l,edge_w,room,remarks
+Corner Upright,1070,450,1,Super White Melamine,Dumblane,1,0,Kitchen,
+Corner Upright,1070,300,1,Super White Melamine,Dumblane,1,0,Kitchen,
+Cutout,884,834,4,Super White Melamine,Dumblane,0,0,Kitchen,Cutouts to be made 450 / 300
+Miter Corner,1070,170,1,Super White Melamine,Dumblane,1,0,Kitchen,45 Deg Mitre on each side
+Corner Stretcher,734,80,2,Super White Melamine,Dumblane,1,0,Kitchen,
+Corner Stretcher,868,80,2,Super White Melamine,Dumblane,1,0,Kitchen,
+Oven Upright,2414,600,2,Super White Melamine,Dumblane,1,0,Kitchen,
+Oven Base,600,600,1,Super White Melamine,Dumblane,1,0,Kitchen,
+Oven Shelves,568,600,6,Super White Melamine,Dumblane,1,0,Kitchen,
+Oven Shelves,568,575,2,Super White Melamine,Dumblane,1,0,Kitchen,
+Oven Stretcher,568,80,2,Super White Melamine,Dumblane,1,0,Kitchen,
+Broom Upright,2414,600,2,Super White Melamine,Dumblane,1,0,Kitchen,
+Broom Base,600,450,1,Super White Melamine,Dumblane,0,1,Kitchen,
+Broom Shelves,600,418,2,Super White Melamine,Dumblane,0,1,Kitchen,
+Broom Shelves,575,418,2,Super White Melamine,Dumblane,0,1,Kitchen,
+Broom Stretcher,418,80,3,Super White Melamine,Dumblane,1,0,Kitchen,
+Base Uprights,730,560,14,Super White Melamine,Dumblane,1,0,Kitchen,
+400 Unit Base,560,368,1,Super White Melamine,Dumblane,0,1,Kitchen,
+400 Unit Stretcher,368,80,3,Super White Melamine,Dumblane,1,0,Kitchen,
+600 Unit Base,568,560,2,Super White Melamine,Dumblane,1,0,Kitchen,
+600 Unt Stretcher,568,80,6,Super White Melamine,Dumblane,1,0,Kitchen,
+Drawer Components,500,250,4,Super White Melamine,Dumblane,1,0,Kitchen,
+Drawer Components,524,237,4,Super White Melamine,Dumblane,1,0,Kitchen,
+Drawer Bases,524,468,5,Super White Melamine,Dumblane,0,0,Kitchen,
+Blind Shelf & Base,1068,560,2,Super White Melamine,Dumblane,1,0,Kitchen,
+Blind Stretcher,1068,80,3,Super White Melamine,Dumblane,1,0,Kitchen,
+Sink Base & Shelf,968,560,2,Super White Melamine,Dumblane,1,0,Kitchen,
+Sink Stretcher,968,80,3,Super White Melamine,Dumblane,1,0,Kitchen,
+Fridge Upright,600,500,2,Super White Melamine,Dumblane,1,0,Kitchen,
+Fridge Shelves,918,500,3,Super White Melamine,Dumblane,1,0,Kitchen,
+Fridge Stretcher,918,80,2,Super White Melamine,Dumblane,1,0,Kitchen,
+Top unit Upright,500,450,4,Super White Melamine,Dumblane,1,0,Kitchen,
+Top unit shelves,968,450,6,Super White Melamine,Dumblane,1,0,Kitchen,
+Top Unit stretcher,988,80,4,Super White Melamine,Dumblane,1,0,Kitchen,
+500 Unit Base,560,468,2,Super White Melamine,Dumblane,0,1,Kitchen,
+500 Stretcher,468,80,6,Super White Melamine,Dumblane,1,0,Kitchen,
+Bin Components,468,424,5,Super White Melamine,Dumblane,0,0,Kitchen,
+Bin Components,600,424,1,Super White Melamine,Dumblane,2,1,Kitchen,
+Bin Components,500,450,2,Super White Melamine,Dumblane,1,0,Kitchen,
+Bin Components,424,437,1,Super White Melamine,Dumblane,1,0,Kitchen,
+Drawer Components,500,198,6,Super White Melamine,Dumblane,1,0,Kitchen,
+Drawer Components,524,185,6,Super White Melamine,Dumblane,1,0,Kitchen,
+Drawer Components,500,138,8,Super White Melamine,Dumblane,1,0,Kitchen,
+Drawer Components,424,125,8,Super White Melamine,Dumblane,1,0,Kitchen,
+Drawer Components,500,222,4,Super White Melamine,Dumblane,1,0,Kitchen,
+Drawer Components,524,209,4,Super White Melamine,Dumblane,1,0,Kitchen,
+Oven Drawer Bases,524,468,2,Super White Melamine,Dumblane,0,0,Kitchen,
+Kicker,2745,170,3,Dumblane,Dumblane,0,0,Kitchen,Plinth
+Panel,1065,594,1,Dumblane,Dumblane,2,2,Kitchen,L Swing
+Door Panel,1065,380,1,Dumblane,Dumblane,2,2,Kitchen,
+Corner Panel,1110,330,1,Dumblane,Dumblane,1,0,Kitchen,
+Corner Panel,1110,480,1,Dumblane,Dumblane,1,2,Kitchen,
+BulkHead,1450,330,1,Dumblane,Dumblane,1,0,Kitchen,
+Side Panels,2740,630,4,Dumblane,Dumblane,1,0,Kitchen,
+Oven Door,815,596,1,Dumblane,Dumblane,2,2,Kitchen,R Swing.
+Oven and Broom panel,2740,150,1,Dumblane,Dumblane,1,0,Kitchen,
+Oven and Broom panel,2740,150,1,Dumblane,Dumblane,0,0,Kitchen,
+Broom Door,2425,447,1,Dumblane,Dumblane,2,2,Kitchen,R Swing.
+Fridge doors,595,472,2,Dumblane,Dumblane,2,2,Kitchen,
+Top Unit Doors,495,498,4,Dumblane,Dumblane,2,2,Kitchen,Leave the holes out
+Panel,950,550,1,Dumblane,Dumblane,1,0,Kitchen,
+Top Unit panel,2000,480,1,Dumblane,Dumblane,1,0,Kitchen,
+Panel,950,480,1,Dumblane,Dumblane,1,0,Kitchen,
+Light Panel,400,330,1,Dumblane,Dumblane,1,0,Kitchen,
+Drawer Front,264,596,2,Dumblane,Dumblane,2,2,Kitchen,
+Fridge Panel,950,550,1,Dumblane,Dumblane,1,0,Kitchen,
+Gas Unit Door,725,397,1,Clydeshaw,Clydeshaw,2,2,Kitchen,R Swing.
+Drawer Front,361,596,2,Clydeshaw,Clydeshaw,2,2,Kitchen,Grain Match
+500 Unit Door,725,496,1,Clydeshaw,Clydeshaw,2,2,Kitchen,L Swing.
+Sink Side Panel,900,600,1,Clydeshaw,Clydeshaw,0,1,Kitchen,Blind Corner Panel
+Sink Side Panel,900,600,3,Clydeshaw,Clydeshaw,1,0,Kitchen,
+Side Filler,880,50,1,Clydeshaw,Clydeshaw,0,0,Kitchen,Side Filler
+Sink Double Up,968,50,2,Clydeshaw,Clydeshaw,1,0,Kitchen,Sink Stretchers
+500 Unit door,725,497,2,Clydeshaw,Clydeshaw,2,2,Kitchen,"1xL Swing, 1xR Swing."
+Box Uprights,350,300,2,Clydeshaw,Clydeshaw,1,1,Kitchen,
+Box Shelves,1968,300,2,Clydeshaw,Clydeshaw,1,0,Kitchen,
+Box Backing,1968,318,1,Clydeshaw,Clydeshaw,0,0,Kitchen,
+500 Unit door,725,497,1,Clydeshaw,Clydeshaw,2,2,Kitchen,
+Drawer Front,240,596,3,Clydeshaw,Clydeshaw,2,2,Kitchen,Grain Match
+Drawer Front,179,496,4,Clydeshaw,Clydeshaw,2,2,Kitchen,Grain Match
+Island Panel,1620,900,1,Clydeshaw,Clydeshaw,0,0,Kitchen,
+Box Light Panel,2000,330,1,Clydeshaw,Clydeshaw,1,0,Kitchen,
+Wine Rack Uprights,160,300,2,Clydeshaw,Clydeshaw,1,1,Kitchen,
+Wine Rack,918,300,2,Clydeshaw,Clydeshaw,1,0,Kitchen,
+Wine Rack Backing,128,918,1,Clydeshaw,Clydeshaw,0,0,Kitchen,
+Wine rack,128,284,6,Clydeshaw,Clydeshaw,1,0,Kitchen,
+Panel,950,550,1,Clydeshaw,Clydeshaw,1,0,Kitchen,
+Corner Backing,1070,896,1,White Hardboard,Dumblane,0,0,Kitchen,
+Corner Backing,1070,846,1,White Hardboard,Dumblane,0,0,Kitchen,
+Oven Backing,2430,596,1,White Hardboard,Dumblane,0,0,Kitchen,
+Broom Backing,2480,446,1,White Hardboard,Dumblane,0,0,Kitchen,
+400 Unit Backing,730,396,1,White Hardboard,Dumblane,0,0,Kitchen,
+600 Unit Backing,730,596,2,White Hardboard,Dumblane,0,0,Kitchen,
+Blind Backing,1096,730,1,White Hardboard,Dumblane,0,0,Kitchen,
+Sink Backing,730,996,1,White Hardboard,Dumblane,0,0,Kitchen,
+Fridge Backing,600,946,1,White Hardboard,Dumblane,0,0,Kitchen,
+Top Unit Backings,500,996,2,White Hardboard,Dumblane,0,0,Kitchen,
+500 Unit Backing,730,496,2,White Hardboard,Dumblane,0,0,Kitchen,
+Bedroom Upright,2414,550,16,Super White Melamine,Dumblane,1,0,Bedroom,
+Spare Bedroom Base,1000,550,2,Super White Melamine,Dumblane,1,0,Bedroom,
+Spare Bed Shelf,968,550,4,Super White Melamine,Dumblane,1,0,Bedroom,
+Spare Bed Cleat,968,100,4,Super White Melamine,Dumblane,1,0,Bedroom,
+Spare Bed Shelves,550,500,2,Super White Melamine,Dumblane,0,1,Bedroom,
+Spare bed Shelves,550,468,4,Super White Melamine,Dumblane,0,1,Bedroom,
+Spare bed Shelves,525,468,8,Super White Melamine,Dumblane,0,1,Bedroom,
+Spare Bed Cleats,468,100,4,Super White Melamine,Dumblane,1,0,Bedroom,
+Vanity,500,460,4,Super White Melamine,Dumblane,1,1,Bedroom,
+Big Vanity Base,996,460,1,Super White Melamine,Dumblane,1,0,Bedroom,
+Big Vanity Shelf,996,435,1,Super White Melamine,Dumblane,1,0,Bedroom,
+Big Vanity Stretcher,996,100,2,Super White Melamine,Dumblane,1,0,Bedroom,
+Big Vanity Back,996,468,1,Super White Melamine,Dumblane,0,0,Bedroom,New Component
+Small Vanity,768,460,1,Super White Melamine,Dumblane,1,0,Bedroom,
+Small Vanity Shelf,768,435,1,Super White Melamine,Dumblane,1,0,Bedroom,
+Small Vanity Stretcher,768,100,2,Super White Melamine,Dumblane,1,0,Bedroom,
+Small Vanity Back,768,468,1,Super White Melamine,Dumblane,0,0,Bedroom,New Component
+Main Bedroom Base,1200,550,2,Super White Melamine,Dumblane,1,0,Bedroom,
+Main Bed Shelf,1168,550,4,Super White Melamine,Dumblane,1,0,Bedroom,
+Main Bed Cleat,1168,100,4,Super White Melamine,Dumblane,1,0,Bedroom,
+Main Bed Base,600,550,2,Super White Melamine,Dumblane,1,0,Bedroom,
+Main Bed Shelf,568,550,4,Super White Melamine,Dumblane,1,0,Bedroom,
+Main Bed Shelf,568,525,8,Super White Melamine,Dumblane,1,0,Bedroom,
+Main Bed Cleat,568,100,4,Super White Melamine,Dumblane,1,0,Bedroom,
+Main Bed Door,2425,497,4,Dumblane,Dumblane,2,2,Bedroom,1xL Swing. 1xR Swing.
+Main Bed Door,2425,497,1,Dumblane,Dumblane,2,2,Bedroom,L Swing.
+Main Bed Door,2425,497,1,Dumblane,Dumblane,2,2,Bedroom,R Swing.
+Vanity big doors,495,511,2,Dumblane,Dumblane,2,2,Bedroom,Vanity Doors
+Vanity Stretcher,996,50,1,Dumblane,Dumblane,1,0,Bedroom,Vanity Stretcher
+Vanity small doors,495,397,2,Dumblane,Dumblane,2,2,Bedroom,Vanity Stretcher
+Vanity Stretcher,768,50,2,Dumblane,Dumblane,1,0,Bedroom,Vanity Stretcher
+Spare Bed door,2425,597,4,Dumblane,Dumblane,2,2,Bedroom,1xL Swing. 1xR Swing.
+Spare bed Door,2425,597,2,Dumblane,Dumblane,2,2,Bedroom,L Swing.
+Top Filler,2745,170,3,Clydeshaw,Dumblane,0,0,Bedroom,Top Fillers
+Side Filler,2580,130,4,Clydeshaw,Dumblane,0,0,Bedroom,Side Filler
+Vanity Side panel,520,500,4,Clydeshaw,Dumblane,1,1,Bedroom,
+Filler Panel,1028,100,1,Clydeshaw,Dumblane,1,0,Bedroom,
+Filler Panel,800,100,1,Clydeshaw,Dumblane,1,0,Bedroom,
+Main Bed Back,2430,996,2,White Hardboard,Dumblane,0,0,Bedroom,
+Main Bed back,2430,496,2,White Hardboard,Dumblane,0,0,Bedroom,
+Spare Bed Back,2430,1196,2,White Hardboard,Dumblane,0,0,Bedroom,
+Spare Bed Back,2430,596,2,White Hardboard,Dumblane,0,0,Bedroom,`;
+
+/* ---------- Room colour ---------- */
+function roomColor(room){
+  const k = String(room||"").trim().toLowerCase();
+  if(k==="kitchen") return getCSS("--room-kitchen");
+  if(k==="bedroom") return getCSS("--room-bedroom");
+  return "#7e8aa0";
+}
+function getCSS(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim() || "#4f8cff"; }
+
+/* ---------- State ---------- */
+const state = {
+  parts: [],            // [{part_name,length_mm,width_mm,qty,material,room,remarks}]
+  room: "",             // "" = all
+  material: "",         // "" = all
+  query: "",
+  source: "loading",    // loading | live | cached | error
+  error: "",
+  updated: null
+};
+
+/* ============================ CSV PARSING ============================ */
+/* RFC-4180-ish: quotes, embedded commas/newlines, CRLF, BOM */
+function parseCSV(text){
+  if(!text) return [];
+  if(text.charCodeAt(0)===0xFEFF) text = text.slice(1);
+  const rows=[]; let row=[], field="", q=false, i=0;
+  while(i < text.length){
+    const c = text[i];
+    if(q){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field+='"'; i+=2; continue; }
+        q=false; i++; continue;
+      }
+      field+=c; i++; continue;
+    }
+    if(c === '"'){ q=true; i++; continue; }
+    if(c === ','){ row.push(field); field=""; i++; continue; }
+    if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=""; i++; continue; }
+    if(c === '\r'){ i++; continue; }
+    field+=c; i++;
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+function normKey(s){ return String(s||"").trim().toLowerCase().replace(/[\s_\-]+/g,""); }
+
+function rowsToParts(rows){
+  if(!rows.length) return [];
+  const header = rows[0].map(normKey);
+  const col = name => header.indexOf(name);
+  const iName=col("partname"), iLen=col("lengthmm"), iWid=col("widthmm"),
+        iQty=col("qty"), iMat=col("material"), iRoom=col("room"), iRem=col("remarks"),
+        iEdg=col("edging"), iEdL=col("edgel"), iEdW=col("edgew");
+  if(iName < 0) return [];
+  const g=(r,idx)=> idx>=0 ? String(r[idx]??"").trim() : "";
+  const out=[];
+  for(let r=1; r<rows.length; r++){
+    const row=rows[r];
+    if(!row || row.every(c=>String(c).trim()==="")) continue;
+    const name=g(row,iName);
+    if(!name) continue;                       // skip blank-name rows
+    out.push({
+      part_name: name,
+      length_mm: g(row,iLen),
+      width_mm:  g(row,iWid),
+      qty:       g(row,iQty),
+      material:  g(row,iMat),
+      edging:    g(row,iEdg),
+      edge_l:    g(row,iEdL),
+      edge_w:    g(row,iEdW),
+      room:      g(row,iRoom),
+      remarks:   g(row,iRem)
+    });
+  }
+  return out;                                 // keep EVERY row — duplicates stay separate
+}
+
+/* ============================ DATA LOAD ============================ */
+function getCsvUrl(){
+  const p = new URLSearchParams(location.search).get("csv");
+  if(p) return p.trim();
+  const ls = localStorage.getItem("cedarwood_cutlist_csv_url");
+  if(ls) return ls.trim();
+  return (CONFIG.CSV_URL||"").trim();
+}
+
+async function loadData(){
+  const url = getCsvUrl();
+  state.source="loading"; renderMeta();
+  if(url){
+    try{
+      const res = await fetch(url, { cache:"no-store" });
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      const parts = rowsToParts(parseCSV(await res.text()));
+      if(!parts.length) throw new Error("no rows parsed");
+      state.parts=parts; state.source="live"; state.error=""; state.updated=new Date();
+      rebuildFilters(); renderAll(); return;
+    }catch(e){ state.error=e.message; state.source="error"; }
+  }
+  // fall back to the embedded snapshot so the list still works offline
+  state.parts = rowsToParts(parseCSV(FALLBACK_CSV));
+  if(state.source!=="error") state.source="cached";
+  rebuildFilters(); renderAll();
+}
+
+/* ============================ SEARCH LOGIC ============================
+   Two-way search. The query is split into:
+     • number tokens  (\d+)  → SIZE search
+     • word tokens    (a–z)  → NAME / text search   (a lone "x"/"×"/"*" is dropped)
+   Behaviour:
+     • text only        → match parts whose name/material/room/remarks contain every word
+     • one number       → match parts where a dimension contains it, OR the name does
+                          (exact dimension match ranks first)
+     • two+ numbers     → treat as dimensions; every number must match a dimension
+                          (order-independent), e.g. "815 596" / "815 x 596"
+     • mixed            → all words AND all numbers must match (AND logic)
+==================================================================== */
+function parseQuery(raw){
+  const q = String(raw||"").trim().toLowerCase();
+  const nums = q.match(/\d+/g) || [];
+  // 2+ char alpha tokens; this also drops a lone "x"/"×"/"*" size separator and
+  // avoids single letters (e.g. "r") matching loosely inside words like "Door".
+  const words = q.split(/[^a-z]+/).filter(w => w.length >= 2);
+  return { q, nums, words, empty: !q };
+}
+
+function numbersMatch(p, nums){
+  if(!nums.length) return { ok:true, exact:false };
+  const dims = [String(p.length_mm), String(p.width_mm)];
+  if(nums.length===1){
+    const n = nums[0];
+    const exact  = dims.includes(n);
+    const dimSub = dims.some(d => d.includes(n));
+    const inName = String(p.part_name||"").toLowerCase().includes(n);
+    return { ok: dimSub || inName, exact };
+  }
+  // 2+ numbers → dimensions (order-independent)
+  const exactAll = nums.every(n => dims.includes(n));
+  const subAll   = nums.every(n => dims.some(d => d.includes(n)));
+  return { ok: subAll, exact: exactAll };
+}
+
+function matchPart(p, parsed){
+  const hay = (p.part_name+" "+p.material+" "+p.room+" "+p.remarks).toLowerCase();
+  for(const w of parsed.words){ if(!hay.includes(w)) return null; }
+  const nm = numbersMatch(p, parsed.nums);
+  if(!nm.ok) return null;
+  // relevance score (higher = nearer the top)
+  let score = 0;
+  const name = p.part_name.toLowerCase();
+  if(parsed.words.length){
+    const inName = parsed.words.every(w => name.includes(w));
+    if(inName) score += 2;
+    if(name.startsWith(parsed.words[0])) score += 3;
+  }
+  if(parsed.nums.length) score += nm.exact ? 5 : 1;
+  return { part:p, score };
+}
+
+function currentResults(){
+  const parsed = parseQuery(state.query);
+  const out = [];
+  for(const p of state.parts){
+    if(state.room && (p.room||"").toLowerCase() !== state.room.toLowerCase()) continue;
+    if(state.material && (p.material||"") !== state.material) continue;
+    if(parsed.empty){ out.push({ part:p, score:0 }); continue; }
+    const m = matchPart(p, parsed);
+    if(m) out.push(m);
+  }
+  out.sort((a,b)=>
+       b.score - a.score
+    || a.part.part_name.localeCompare(b.part.part_name, undefined, {sensitivity:"base"})
+    || (parseInt(a.part.length_mm,10)||0) - (parseInt(b.part.length_mm,10)||0)
+  );
+  return { parsed, list: out.map(r=>r.part) };
+}
+
+/* ============================ RENDER ============================ */
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+function escapeReg(s){return String(s).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}
+
+function highlightName(name, words){
+  const S="\u0001", E="\u0002";   // sentinels survive escapeHtml, then become <mark>
+  let s = String(name);
+  words.forEach(w=>{
+    if(!w) return;
+    s = s.replace(new RegExp("("+escapeReg(w)+")","ig"), S+"$1"+E);
+  });
+  return escapeHtml(s).split(S).join("<mark>").split(E).join("</mark>");
+}
+
+function dimHTML(value, parsed){
+  const v = String(value);
+  let hit = false;
+  if(parsed.nums.length){
+    if(parsed.nums.includes(v)) hit = true;                        // exact dimension match
+    else if(parsed.nums.length===1 && v.includes(parsed.nums[0])) hit = true; // partial (single number)
+  }
+  return hit ? "<mark>"+escapeHtml(v)+"</mark>" : escapeHtml(v);
+}
+
+/* Edge-banding line: edge_l / edge_w = how many of the long / short edges (0-2). */
+function edgeLineHTML(p){
+  const L = parseInt(p.edge_l,10)||0, W = parseInt(p.edge_w,10)||0;
+  if(!p.edging && !L && !W) return "";                 // no edging data at all
+  if(L===0 && W===0){
+    return `<div class="edge-line none"><span class="lab">Edge</span><span>None</span></div>`;
+  }
+  const sides=[];
+  if(L) sides.push(L+(L>1?" long edges":" long edge"));
+  if(W) sides.push(W+(W>1?" short edges":" short edge"));
+  return `<div class="edge-line"><span class="lab">Edge</span>`
+       + `<span class="mat">${escapeHtml(p.edging||"")}</span>`
+       + `<span class="sides">${sides.join(" + ")}</span></div>`;
+}
+
+function cardHTML(p, parsed){
+  const col = roomColor(p.room);
+  const roomTag = p.room
+    ? `<span class="room-tag" style="--rt:${col}">${escapeHtml(p.room)}</span>` : "";
+  const name = parsed.words.length ? highlightName(p.part_name, parsed.words) : escapeHtml(p.part_name);
+  const len = dimHTML(p.length_mm, parsed), wid = dimHTML(p.width_mm, parsed);
+  const qty = p.qty ? `<span class="pill qty"><span class="lab">Qty</span><b>${escapeHtml(p.qty)}</b></span>` : "";
+  const mat = p.material ? `<span class="pill">${escapeHtml(p.material)}</span>` : "";
+  const edge = edgeLineHTML(p);
+  const rem = (p.remarks && p.remarks.trim())
+    ? `<div class="remarks"><span class="ic">⚑</span><span>${escapeHtml(p.remarks)}</span></div>` : "";
+  return `<div class="card">
+      <div class="card-top">
+        <div class="card-name">${name}</div>
+        ${roomTag}
+      </div>
+      <div class="dims">${len}<span class="x">×</span>${wid}<span class="u">mm</span></div>
+      <div class="meta">${qty}${mat}</div>
+      ${edge}
+      ${rem}
+    </div>`;
+}
+
+function renderResults(){
+  const { parsed, list } = currentResults();
+  const box = document.getElementById("results");
+  if(!list.length){
+    box.innerHTML = `<div class="empty-state">
+        <div class="big">🔍</div>
+        <div class="t">No parts found</div>
+        <div class="s">Try a part name (e.g. “drawer”) or a size (e.g. “815” or “815 x 596”).</div>
+      </div>`;
+  }else{
+    box.innerHTML = list.map(p => cardHTML(p, parsed)).join("");
+  }
+  renderCount(list.length, parsed);
+}
+
+function renderCount(n, parsed){
+  const el = document.getElementById("count");
+  const active = !parsed.empty || state.room || state.material;
+  if(!state.parts.length){ el.textContent = "Loading…"; return; }
+  const noun = n===1 ? "part" : "parts";
+  el.innerHTML = active
+    ? `<b>${n}</b> ${noun} found`
+    : `<b>${n}</b> ${noun} total`;
+}
+
+/* ---------- Filters ---------- */
+function distinct(key, order){
+  const seen=new Set();
+  state.parts.forEach(p=>{ const v=(p[key]||"").trim(); if(v) seen.add(v); });
+  let arr=[...seen];
+  if(order) arr.sort((a,b)=>{
+    const ia=order.indexOf(a), ib=order.indexOf(b);
+    if(ia>-1||ib>-1) return (ia<0?99:ia)-(ib<0?99:ib);
+    return a.localeCompare(b);
+  });
+  else arr.sort((a,b)=>a.localeCompare(b));
+  return arr;
+}
+
+function rebuildFilters(){
+  // Rooms
+  const rooms = distinct("room", ["Kitchen","Bedroom"]);
+  let rh = chip("", "All", state.room==="", "room", null, state.parts.length);
+  rooms.forEach(r=>{
+    rh += chip(r, r, state.room===r, "room", roomColor(r),
+               state.parts.filter(p=>p.room===r).length);
+  });
+  document.getElementById("roomFilters").innerHTML = rh;
+
+  // Materials
+  const mats = distinct("material");
+  let mh = chipSm("", "All materials", state.material==="");
+  mats.forEach(m=>{
+    mh += chipSm(m, m, state.material===m);
+  });
+  document.getElementById("matFilters").innerHTML = mh;
+}
+function chip(val,label,active,group,dot,count){
+  const d = dot ? `<span class="dot" style="background:${dot}"></span>` : "";
+  const c = (count!=null) ? ` <b>${count}</b>` : "";
+  return `<button class="chip${active?" active":""}" data-group="${group}" data-val="${escapeHtml(val)}">${d}${escapeHtml(label)}${c}</button>`;
+}
+function chipSm(val,label,active){
+  return `<button class="chip sm${active?" active":""}" data-group="material" data-val="${escapeHtml(val)}">${escapeHtml(label)}</button>`;
+}
+
+/* ---------- Source badge ---------- */
+function renderMeta(){
+  const el = document.getElementById("srcBadge");
+  if(state.source==="loading"){ el.className="src-badge"; el.textContent="Loading…"; return; }
+  if(state.source==="live"){
+    const t = state.updated ? state.updated.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) : "";
+    el.className="src-badge live"; el.textContent="● Live"+(t?" · "+t:"");
+  }else if(state.source==="error"){
+    el.className="src-badge error"; el.textContent="⚠ Offline · cached list";
+  }else{
+    el.className="src-badge cached"; el.textContent="Cached list";
+  }
+}
+
+function renderAll(){
+  renderMeta();
+  renderResults();
+}
+
+/* ============================ EVENTS ============================ */
+const searchEl = document.getElementById("search");
+const searchBox = document.getElementById("searchBox");
+searchEl.addEventListener("input", ()=>{
+  state.query = searchEl.value;
+  searchBox.classList.toggle("has-val", !!searchEl.value);
+  renderResults();
+});
+document.getElementById("searchClear").addEventListener("click", ()=>{
+  searchEl.value=""; state.query=""; searchBox.classList.remove("has-val");
+  searchEl.focus(); renderResults();
+});
+
+document.body.addEventListener("click", e=>{
+  const chip = e.target.closest(".chip");
+  if(!chip) return;
+  const group = chip.dataset.group, val = chip.dataset.val;
+  if(group==="room") state.room = (state.room===val) ? "" : val;
+  else if(group==="material") state.material = (state.material===val) ? "" : val;
+  rebuildFilters(); renderResults();
+});
+
+document.getElementById("btnRefresh").addEventListener("click", ()=>{
+  const b=document.getElementById("btnRefresh");
+  b.style.transition="transform .4s"; b.style.transform="rotate(360deg)";
+  setTimeout(()=>{ b.style.transform=""; },420);
+  loadData();
+});
+document.getElementById("btnSettings").addEventListener("click", ()=>{
+  const cur = getCsvUrl();
+  const v = prompt("Paste the published Google Sheet CSV URL.\n(Leave blank to reset to the built-in default.)", cur);
+  if(v===null) return;
+  if(v.trim()) localStorage.setItem("cedarwood_cutlist_csv_url", v.trim());
+  else localStorage.removeItem("cedarwood_cutlist_csv_url");
+  loadData();
+});
+
+/* ============================ INIT ============================ */
+loadData();
+if(CONFIG.REFRESH_MINUTES>0) setInterval(loadData, CONFIG.REFRESH_MINUTES*60000);
+
+/* expose for automated testing */
+window.__cutlist = { parseQuery, numbersMatch, matchPart, currentResults, state };
+</script>
+</body>
+</html>
