@@ -57,7 +57,7 @@
     padding-top:calc(10px + env(safe-area-inset-top,0));
   }
   .head-row{display:flex;align-items:center;gap:10px}
-  .brand{flex:1;min-width:0}
+  .brand{flex:1;min-width:0;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   .brand h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .brand p{margin:1px 0 0;font-size:11.5px;color:var(--muted)}
   .head-btns{display:flex;gap:6px}
@@ -176,13 +176,12 @@
 
   <header>
     <div class="head-row">
-      <div class="brand">
+      <div class="brand" id="brand">
         <h1>Cedarwood — Cutting List</h1>
         <p>Main Flats &nbsp;·&nbsp; My Cabinet Guy</p>
       </div>
       <div class="head-btns">
         <button class="iconbtn" id="btnRefresh" title="Refresh data" aria-label="Refresh">↻</button>
-        <button class="iconbtn" id="btnSettings" title="Set data source" aria-label="Settings">⚙</button>
       </div>
     </div>
 
@@ -724,14 +723,29 @@ document.getElementById("btnRefresh").addEventListener("click", ()=>{
   setTimeout(()=>{ b.style.transform=""; },420);
   loadData();
 });
-document.getElementById("btnSettings").addEventListener("click", ()=>{
+/* Hidden admin setting: press & hold the title for ~0.8s to change the data source.
+   No visible button, so staff won't stumble into it. */
+function openSettings(){
   const cur = getCsvUrl();
   const v = prompt("Paste the published Google Sheet CSV URL.\n(Leave blank to reset to the built-in default.)", cur);
   if(v===null) return;
   if(v.trim()) localStorage.setItem("cedarwood_cutlist_csv_url", v.trim());
   else localStorage.removeItem("cedarwood_cutlist_csv_url");
   loadData();
-});
+}
+(function(){
+  const el = document.getElementById("brand");
+  let timer=null, fired=false;
+  const start = ()=>{ fired=false; clearTimeout(timer);
+    timer=setTimeout(()=>{ fired=true; openSettings(); }, 800); };
+  const cancel = ()=>{ clearTimeout(timer); timer=null; };
+  el.addEventListener("pointerdown", start);
+  el.addEventListener("pointerup", cancel);
+  el.addEventListener("pointerleave", cancel);
+  el.addEventListener("pointermove", cancel);
+  el.addEventListener("pointercancel", cancel);
+  el.addEventListener("contextmenu", e=>{ if(fired) e.preventDefault(); });
+})();
 
 /* ============================ INIT ============================ */
 loadData();
