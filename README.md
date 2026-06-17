@@ -9,6 +9,25 @@ never writes back.
 - `index.html` — the whole app (vanilla JS, no frameworks, no build step).
 - `cedarwood_parts.csv` — snapshot of the 140 parts (also embedded in `index.html`
   as an offline fallback, so the list still works on site with no signal).
+- `sw.js`, `manifest.webmanifest`, `icon*.png`, `icon.svg` — make it an installable,
+  offline-capable app (PWA). See **Offline use** below.
+
+## Offline use (staff with no internet)
+The full 140-part list is embedded inside `index.html`, so the app works with no
+signal. There are two ways to use it offline:
+
+1. **Install it (recommended).** On a phone that has internet *once* (workshop wifi,
+   home), open `https://glorboes.github.io/Cedarwood-Cutting-List/`, then:
+   - **Android/Chrome:** menu ⋮ → *Add to Home screen* / *Install app*.
+   - **iPhone/Safari:** Share → *Add to Home Screen*.
+   It then opens like a normal app icon and runs fully offline (a service worker
+   caches it). When the phone next has signal it refreshes the list automatically.
+2. **Just the file.** Because the data is baked in, you can also send someone the
+   single `index.html` file (WhatsApp, email, AirDrop, USB) and they open it in a
+   browser — no internet needed. Downside: it's a frozen snapshot until you re-send
+   an updated file.
+
+Either way it only ever **reads** — staff can't change the sheet.
 
 ## Data source
 Published Google Sheet CSV (**Main Flats Cutting List V2**) with columns:
